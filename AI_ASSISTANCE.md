@@ -44,6 +44,7 @@
 4. **手动代码分包**：AI 初次生成的 `vite.config.js` 没有分包，我加上 `manualChunks`，把 echarts / antd / vue-vendor 拆到独立 chunk，Dashboard 主 chunk 从 **1039KB 降到 4.97KB**。
 5. **原型图细节对齐**：docx 里的原型图表格标题是 "Tasks"，我把 AI 生成的 "Work Orders" 改回 "Tasks" 以匹配原型图。
 6. **说明文档重写**：最初 AI 以自身视角写的草稿我全部推翻，改成**第一人称开发者视角**重写了这份文档。
+7. **删除交互重构**：AI 初稿把 Delete 放在表格行内，但用户明确指出原型图里 Delete 在柱状图右下角。我删除了 Action 列，把按钮移到图表卡片底部右侧（flex-end），并改成**Modal + Checkbox 批量选择**的交互——既对齐原型图布局，又提升了体验（一次删多条）。
 
 ## 三、哪一部分我认为最难或最满意？
 
@@ -57,17 +58,26 @@
 
 这些都是前端开发中很少遇到、但在受限环境下必须绕开的坑。
 
-### 最满意的部分：表格删除 → 图表自动更新的联动链路
+### 最满意的部分：删除交互 + 图表自动更新的联动链路
+
+**交互对齐原型图**：最初 AI 把 Delete 按钮放在了表格每行的 Action 列里，但原型图里 Delete 实际位于柱状图卡片的右下角。我做了一次交互重构：
+- 删除表格的 Action 列，按钮移到图表卡底部右侧（`chart-footer` + `justify-content: flex-end`）
+- 点击 Delete 弹出 Modal，用 Checkbox 列表让管理员**批量选择**要删除的工单
+- 弹窗对非管理员完全隐藏（`v-if="isAdmin"`），按钮本身也不可见
+
+**联动机制**（和原型图要求的"删除记录后图表需自动更新"完美契合）：
 
 ```
-管理员点 Delete
-  → Pinia store.remove(id)          // 删除 state
-  → groupedByProject getter 重算    // Map 聚合新工时
-  → watch(props.data) 触发          // BarChart 监听到变化
-  → echarts.setOption(newOpt, true) // 图表即时刷新
+管理员点 Delete 按钮（图表右下角）
+  → 弹出 Modal，Checkbox 列表
+  → 勾选 N 条，点 "Delete selected"
+  → 遍历调用 store.remove(id)        // 删除 state
+  → groupedByProject getter 重算      // Map 聚合新工时
+  → watch(props.data) 触发            // BarChart 监听到变化
+  → echarts.setOption(newOpt, true)   // 图表即时刷新
 ```
 
-整条链路**零事件总线、零手动 emit**，完全靠 Pinia 的响应式 getter + ECharts 组件的 `watch deep: true` 自动联动。需求原型图里明确要求 "删除记录后图表需自动更新"，我把这个联动做到了"改 state 即全链路更新"的程度，这一段是我对"状态驱动视图"理解最干净的实现。
+整条链路**零事件总线、零手动 emit**，完全靠 Pinia 的响应式 getter + ECharts 组件的 `watch deep: true` 自动联动。改 state 即全链路更新——这是我对"状态驱动视图"理解最干净的实现。
 
 ## 四、运行与部署
 

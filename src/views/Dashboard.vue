@@ -32,21 +32,8 @@
                       {{ record.overtime ? 'Yes' : 'No' }}
                     </a-tag>
                   </template>
-
                   <template v-else-if="column.key === 'hours'">
                     {{ record.hours }}h
-                  </template>
-
-                  <template v-else-if="column.key === 'action'">
-                    <a-button
-                      v-if="isAdmin"
-                      danger
-                      size="small"
-                      @click="onDelete(record)"
-                    >
-                      Delete
-                    </a-button>
-                    <span v-else class="muted">—</span>
                   </template>
                 </template>
               </a-table>
@@ -55,20 +42,59 @@
 
           <!-- 图表 -->
           <a-col :xs="24" :lg="10">
-            <a-card title="Project Hours Distribution" class="card">
+            <a-card title="Project Hours Distribution" class="card chart-card">
               <BarChart :data="orderStore.groupedByProject" />
+
+              <!-- 管理员可见：Delete 按钮位于卡片右下角 -->
+              <div v-if="isAdmin" class="chart-footer">
+                <a-button danger size="small" @click="openDeleteModal">Delete</a-button>
+              </div>
             </a-card>
           </a-col>
         </a-row>
+
+        <!-- 选择要删除的工单 Modal -->
+        <a-modal
+          v-model:open="deleteModalVisible"
+          title="Select work orders to delete"
+          :ok-button-props="{ danger: true, disabled: selectedIds.length === 0 }"
+          ok-text="Delete selected"
+          cancel-text="Cancel"
+          @ok="confirmDelete"
+        >
+          <a-alert
+            v-if="orderStore.list.length === 0"
+            type="info"
+            message="No work orders to delete."
+            show-icon
+          />
+
+          <a-checkbox-group
+            v-else
+            v-model:value="selectedIds"
+            class="delete-checkboxes"
+          >
+            <a-space direction="vertical">
+              <a-checkbox
+                v-for="item in orderStore.list"
+                :key="item.id"
+                :value="item.id"
+              >
+                <strong>{{ item.id }}</strong> — {{ item.project }}
+                <span class="muted">· {{ item.hours }}h · {{ item.created_at }}</span>
+              </a-checkbox>
+            </a-space>
+          </a-checkbox-group>
+        </a-modal>
       </a-layout-content>
     </a-layout>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Modal, message } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { useOrderStore } from '../stores/orders'
 import BarChart from '../components/BarChart.vue'
 
@@ -86,22 +112,25 @@ const columns = [
   { title: 'Project', dataIndex: 'project', key: 'project' },
   { title: 'Overtime', dataIndex: 'overtime', key: 'overtime', width: 100 },
   { title: 'Hours', dataIndex: 'hours', key: 'hours', width: 100, align: 'right' },
-  { title: 'Created At', dataIndex: 'created_at', key: 'created_at', width: 170 },
-  { title: 'Action', key: 'action', width: 120, align: 'center' }
+  { title: 'Created At', dataIndex: 'created_at', key: 'created_at', width: 170 }
 ]
 
-const onDelete = (record) => {
-  Modal.confirm({
-    title: 'Delete this work order?',
-    content: `Project "${record.project}" (ID ${record.id}) will be removed.`,
-    okText: 'Delete',
-    okType: 'danger',
-    cancelText: 'Cancel',
-    onOk() {
-      orderStore.remove(record.id)
-      message.success('Deleted successfully. Chart updated.')
-    }
-  })
+// 删除选择弹窗
+const deleteModalVisible = ref(false)
+const selectedIds = ref([])
+
+const openDeleteModal = () => {
+  selectedIds.value = []
+  deleteModalVisible.value = true
+}
+
+const confirmDelete = () => {
+  if (selectedIds.value.length === 0) return
+  const count = selectedIds.value.length
+  selectedIds.value.forEach((id) => orderStore.remove(id))
+  selectedIds.value = []
+  deleteModalVisible.value = false
+  message.success(`Deleted ${count} work order(s). Chart updated.`)
 }
 
 const onLogout = () => {
@@ -154,8 +183,25 @@ const onLogout = () => {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   }
 
+  .chart-card {
+    display: flex;
+    flex-direction: column;
+
+    .chart-footer {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+  }
+
   .muted {
     color: #bfbfbf;
+  }
+
+  .delete-checkboxes {
+    padding: 8px 0;
+    max-height: 360px;
+    overflow-y: auto;
   }
 }
 </style>
